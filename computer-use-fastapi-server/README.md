@@ -174,6 +174,13 @@ computer-use-fastapi-server/
 5. **Persistence**: All messages are batched and stored in SQLite
 6. **Concurrent Sessions**: Multiple sessions run in parallel using asyncio tasks
 
+## Roadmap
+
+- [ ] True concurrent sessions with isolated displays (multiple Xvfb instances per session)
+- [ ] Session timeout and automatic cleanup
+- [ ] Authentication and API keys per session
+- [ ] Session replay from stored messages
+
 ## License
 
 MIT License - see [LICENSE](../LICENSE) for details.
