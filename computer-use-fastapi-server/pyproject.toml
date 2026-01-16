@@ -1,0 +1,18 @@
+[project]
+name = "energent-ai-test"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "anthropic>=0.75.0",
+    "fastapi[standard]>=0.128.0",
+    "httpx>=0.28.1",
+    "orjson>=3.11.5",
+    "pillow>=12.1.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.12.0",
+    "sqlalchemy>=2.0.45",
+    "uvicorn[standard]>=0.40.0",
+    "websockets>=15.0.1",
+]

@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Session {{ session.id[:8] }} - Claude Computer Use{% endblock %}
+
+{% block extra_css %}
+<style>
+    .session-header {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .session-info h2 {
+        font-size: 1.2rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .session-layout {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 1rem;
+        height: calc(100vh - 250px);
+    }
+
+    .vnc-panel, .chat-panel {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .panel-header {
+        padding: 1rem;
+        border-bottom: 1px solid #eee;
+        font-weight: 600;
+        background: #f8f9fa;
+    }
+
+    .panel-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+    }
+
+    .vnc-panel .panel-content {
+        padding: 0;
+    }
+
+    iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+    }
+
+    .message {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        border-radius: 6px;
+        word-wrap: break-word;
+    }
+
+    .message.user {
+        background: #3498db;
+        color: white;
+        margin-left: 2rem;
+    }
+
+    .message.assistant {
+        background: #ecf0f1;
+    }
+
+    .message.tool {
+        background: #e8f5e9;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
+
+    .message.error {
+        background: #ffebee;
+        color: #c62828;
+    }
+
+    .message.thinking {
+        background: #fff3e0;
+        font-style: italic;
+        color: #e65100;
+    }
+
+    .input-area {
+        border-top: 1px solid #eee;
+        padding: 1rem;
+    }
+
+    #messageInput {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        margin-bottom: 0.75rem;
+        resize: vertical;
+        min-height: 60px;
+    }
+
+    #messageInput:focus {
+        outline: none;
+        border-color: #3498db;
+    }
+
+    .btn-block {
+        width: 100%;
+    }
+
+    .btn-secondary {
+        background: #6c757d;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+        background: #5a6268;
+    }
+
+    .btn-secondary:disabled {
+        background: #adb5bd;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="session-header">
+    <div class="session-info">
+        <h2>Session: <code>{{ session.id[:16] }}...</code></h2>
+        <span class="status {{ session.status }}">{{ session.status }}</span>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+        <button onclick="closeSession()" class="btn btn-secondary" {% if session.status == 'finished' %}disabled{% endif %}>
+            Close Session
+        </button>
+        <a href="/ui/" class="btn">← Back to Sessions</a>
+    </div>
+</div>
+
+<div class="session-layout">
+    <div class="vnc-panel">
+        <div class="panel-header">🖥️ Agent Desktop (VNC)</div>
+        <div class="panel-content">
+            <iframe src="http://localhost:6080/vnc.html?autoconnect=true&resize=scale"></iframe>
+        </div>
+    </div>
+
+    <div class="chat-panel">
+        <div class="panel-header">💬 Chat Session</div>
+        <div class="panel-content" id="chatMessages">
+            {% if messages %}
+                {% for msg in messages %}
+                <div class="message {{ msg.type }}">{{ msg.content }}</div>
+                {% endfor %}
+            {% else %}
+                <p style="color: #999; text-align: center;">No messages yet. Send a task to start!</p>
+            {% endif %}
+        </div>
+        <div class="input-area">
+            <textarea
+                id="messageInput"
+                placeholder="Enter task (e.g., Search the weather in Dubai)"
+                {% if session.status == 'running' %}disabled{% endif %}
+            ></textarea>
+            <button
+                id="sendBtn"
+                onclick="sendMessage()"
+                class="btn-block"
+                {% if session.status == 'running' %}disabled{% endif %}
+            >
+                Send Task
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const sessionId = "{{ session.id }}";
+    let ws = null;
+
+    function sendMessage() {
+        const input = document.getElementById('messageInput');
+        const message = input.value.trim();
+
+        if (!message) return;
+
+        input.value = '';
+        input.disabled = true;
+        document.getElementById('sendBtn').disabled = true;
+
+        // Add user message to chat
+        addMessage('user', message);
+
+        // Connect WebSocket
+        ws = new WebSocket(`ws://localhost:8000/sessions/${sessionId}/ws`);
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ message }));
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            handleMessage(data);
+        };
+
+        ws.onclose = () => {
+            input.disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            addMessage('error', 'Connection error. Please try again.');
+            input.disabled = false;
+            document.getElementById('sendBtn').disabled = false;
+        };
+    }
+
+    function handleMessage(data) {
+        let type = 'assistant';
+        let content = '';
+
+        if (data.type === 'text') {
+            content = data.content.text || JSON.stringify(data.content);
+        } else if (data.type === 'thinking') {
+            type = 'thinking';
+            content = '[Thinking] ' + (data.content.thinking || '...');
+        } else if (data.type === 'tool_use') {
+            type = 'tool';
+            content = `🔧 Tool: ${data.content.name}\nInput: ${JSON.stringify(data.content.input, null, 2)}`;
+        } else if (data.type === 'tool_result') {
+            type = 'tool';
+            const output = data.content.output || 'No output';
+            const error = data.content.error || '';
+            content = `✓ Tool Result\n${error ? 'Error: ' + error : output}`;
+        } else if (data.type === 'error') {
+            type = 'error';
+            content = `❌ Error: ${data.content.error}`;
+        } else if (data.type === 'completed') {
+            addMessage('assistant', '✅ Task completed!');
+            setTimeout(() => location.reload(), 1000);
+            return;
+        } else {
+            content = JSON.stringify(data.content, null, 2);
+        }
+
+        addMessage(type, content);
+    }
+
+    function addMessage(type, content) {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+        messageDiv.textContent = content;
+        chatMessages.appendChild(messageDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // Handle Enter key (Ctrl+Enter to send)
+    document.getElementById('messageInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.ctrlKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    async function closeSession() {
+        if (!confirm('Are you sure you want to close this session?')) return;
+
+        try {
+            const response = await fetch(`/sessions/${sessionId}/finish`, {
+                method: 'PATCH'
+            });
+
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Failed to close session');
+            }
+        } catch (error) {
+            console.error('Error closing session:', error);
+            alert('Error closing session');
+        }
+    }
+</script>
+{% endblock %}

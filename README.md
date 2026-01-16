@@ -26,6 +26,12 @@ An environment and tools that Claude can use to control a desktop computer. This
 
 [Go to Computer Use Demo Quickstart](./computer-use-demo)
 
+### Computer Use FastAPI Server
+
+A production-ready FastAPI backend for Claude's Computer Use capability. Features session management, WebSocket streaming for real-time updates, concurrent session execution, SQLite persistence, and a simple web UI with integrated VNC viewer. Perfect for building scalable computer use applications without Streamlit.
+
+[Go to Computer Use FastAPI Server Quickstart](./computer-use-fastapi-server)
+
 ### Browser Tools API Demo
 
 A complete reference implementation for browser automation powered by Claude. This project demonstrates how to leverage Claude's browser tools API for web interaction, including navigation, DOM inspection, and form manipulation using Playwright.

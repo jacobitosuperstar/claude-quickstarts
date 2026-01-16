@@ -1,0 +1,11 @@
+{
+     "description": "Health test set of the server",
+     "url": "/health/",
+     "test_cases": [
+         {
+             "test_description": "Health Check OK",
+             "input":{},
+             "expected_output": {"status_code": 200}
+         }
+     ]
+}
